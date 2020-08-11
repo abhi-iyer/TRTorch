@@ -17,29 +17,33 @@ auto select_registrations TRTORCH_UNUSED = RegisterNodeConversionPatterns()
     .pattern({
         "aten::select.int(Tensor(a) self, int dim, int index) -> (Tensor(a))",
         [](ConversionCtx* ctx, const torch::jit::Node* n, args& args) -> bool {
-            auto in = args[0].ITensor();
+            auto in = args[0].ITensorOrFreeze(ctx);
             auto axis  = args[1].unwrapToInt();
-            auto ind = (int32_t) args[2].unwrapToInt();
 
-            // index to access needs to be an at::Tensor
-            at::Tensor indices = torch::tensor({ind}).to(torch::kI32);
-            auto weights = Weights(ctx, indices);
+            nvinfer1::ITensor* ind_tensor;
 
-            // IConstantLayer to convert indices from Weights to ITensor
-            auto const_layer = ctx->net->addConstant(weights.shape, weights.data);
-            TRTORCH_CHECK(const_layer, "Unable to create constant layer from node: " << *n);
-            auto const_out = const_layer->getOutput(0);
-            
+            if (args[2].isITensor()) {
+                ind_tensor = args[2].ITensorOrFreeze(ctx);
+            } else {
+                auto weights = Weights(ctx, (int32_t) args[2].unwrapToInt());
+
+                auto const_layer = ctx->net->addConstant(weights.shape, weights.data);
+                TRTORCH_CHECK(const_layer, "Unable to create constant layer from node: " << *n);
+
+                ind_tensor = const_layer->getOutput(0);
+            }
+
             // IGatherLayer takes in input tensor, the indices, and the axis of input tensor to take indices from
-            auto gather_layer = ctx->net->addGather(*in, *const_out, axis);
+            auto gather_layer = ctx->net->addGather(*in, *ind_tensor, axis);
             TRTORCH_CHECK(gather_layer, "Unable to create gather layer from node: " << *n);
+            gather_layer->setName(("Gather Layer " + util::node_info(n)).c_str());
             auto gather_out = gather_layer->getOutput(0);
 
             // IShuffleLayer removes redundant dimensions
             auto shuffle_layer = ctx->net->addShuffle(*gather_out);
             TRTORCH_CHECK(shuffle_layer, "Unable to create shuffle layer from node: " << *n);
             shuffle_layer->setReshapeDimensions(util::unpadDims(gather_out->getDimensions()));
-            shuffle_layer->setName(util::node_info(n).c_str());
+            shuffle_layer->setName(("Shuffle Layer " + util::node_info(n)).c_str());
             auto shuffle_out = shuffle_layer->getOutput(0);
 
             auto out = ctx->AssociateValueAndTensor(n->outputs()[0], shuffle_out);

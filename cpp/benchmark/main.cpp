@@ -10,8 +10,10 @@
 #include <sstream>
 #include <memory>
 
-#define NUM_WARMUP_RUNS 20
-#define NUM_RUNS 100
+#include <csignal>
+
+#define NUM_WARMUP_RUNS 1
+#define NUM_RUNS 3
 
 bool checkRtol(const at::Tensor& diff, const std::vector<at::Tensor> inputs) {
     double maxValue = 0.0;
@@ -45,17 +47,29 @@ void print_avg_std_dev(std::string type, std::vector<float>& runtimes, uint64_t 
     std::cout << "    Latency Standard Deviation: " << rt_std_dev  << "\n    FPS Standard Deviation: " << fps_std_dev  << "\n(excluding initial warmup runs)" << std::endl;
 }
 
-std::vector<float> benchmark_module(torch::jit::script::Module& mod, std::vector<int64_t> shape) {
+std::vector<float> benchmark_module(torch::jit::script::Module& mod, std::vector<int64_t> shape1, std::vector<int64_t> shape2, std::vector<int64_t> shape3) {
     auto execution_timer = timers::PreciseCPUTimer();
     std::vector<float> execution_runtimes;
 
     for (uint64_t i = 0; i < NUM_WARMUP_RUNS; i++) {
         std::vector<torch::jit::IValue> inputs_ivalues;
-        auto in = at::rand(shape, {at::kCUDA});
+        auto in1 = at::rand(shape1, {at::kCUDA});
 #ifdef HALF
-        in = in.to(torch::kHalf);
+        in1 = in1.to(torch::kFloat32);
 #endif
-        inputs_ivalues.push_back(in.clone());
+        inputs_ivalues.push_back(in1.clone());
+
+        auto in2 = at::rand(shape2, {at::kCUDA});
+#ifdef HALF
+        in2 = in2.to(torch::kFloat32);
+#endif
+        inputs_ivalues.push_back(in2.clone());
+
+        auto in3 = at::rand(shape3, {at::kCUDA});
+#ifdef HALF
+        in3 = in3.to(torch::kFloat32);
+#endif
+        inputs_ivalues.push_back(in3.clone());
 
         cudaDeviceSynchronize();
         mod.forward(inputs_ivalues);
@@ -65,11 +79,27 @@ std::vector<float> benchmark_module(torch::jit::script::Module& mod, std::vector
 
     for (uint64_t i = 0; i < NUM_RUNS; i++) {
         std::vector<torch::jit::IValue> inputs_ivalues;
-        auto in = at::rand(shape, {at::kCUDA});
+
+        auto in1 = at::rand(shape1, {at::kCUDA});
 #ifdef HALF
-        in = in.to(torch::kHalf);
+        in1 = in1.to(torch::kFloat32);
 #endif
-        inputs_ivalues.push_back(in.clone());
+        inputs_ivalues.push_back(in1.clone());
+
+        auto in2 = at::rand(shape2, {at::kCUDA});
+#ifdef HALF
+        in2 = in2.to(torch::kFloat32);
+#endif
+        inputs_ivalues.push_back(in2.clone());
+
+        auto in3 = at::rand(shape3, {at::kCUDA});
+#ifdef HALF
+        in3 = in3.to(torch::kFloat32);
+#endif
+        inputs_ivalues.push_back(in3.clone());
+
+        std::cout << i << std::endl;
+
         cudaDeviceSynchronize();
 
         execution_timer.start();
@@ -125,7 +155,7 @@ int main(int argc, const char* argv[]) {
     extra_info.workspace_size = 1 << 20;
 
 #ifdef HALF
-    extra_info.op_precision = torch::kF16;
+    extra_info.op_precision = torch::kF32;
 #endif
 
     auto trt_mod = trtorch::CompileGraph(mod, extra_info);
@@ -138,13 +168,15 @@ int main(int argc, const char* argv[]) {
     out.close();
 #endif
 
-    auto trt_runtimes = benchmark_module(trt_mod, dims[0]);
+    // std::raise(SIGINT);
+
+    auto trt_runtimes = benchmark_module(trt_mod, dims[0], dims[1], dims[2]);
     print_avg_std_dev("JIT/TRT", trt_runtimes, dims[0][0]);
 #endif
 
 
 #ifdef HALF
-    mod.to(torch::kHalf);
+    mod.to(torch::kFloat32);
     for (auto layer : mod.named_modules()) {
         if (layer.name.find(".bn") != std::string::npos) {
             layer.value.to(torch::kFloat);
@@ -153,9 +185,10 @@ int main(int argc, const char* argv[]) {
 #endif
 
 #ifdef JIT
-    auto jit_runtimes = benchmark_module(mod, dims[0]);
+    auto jit_runtimes = benchmark_module(mod, dims[0], dims[1], dims[2]);
     print_avg_std_dev("JIT", jit_runtimes, dims[0][0]);
 #endif
+
 
     std::cout << "ok\n";
 }

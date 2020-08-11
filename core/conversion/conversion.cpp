@@ -7,6 +7,8 @@
 #include "core/conversion/evaluators/evaluators.h"
 #include "core/conversion/conversionctx/ConversionCtx.h"
 
+#include <csignal>
+
 namespace trtorch {
 namespace core {
 namespace conversion {

@@ -71,6 +71,10 @@ converter_test(
   name = "test_loop"
 )
 
+converter_test(
+  name = "test_lstm_cell"
+)
+
 test_suite(
   name = "test_converters",
   tests = [
@@ -88,6 +92,7 @@ test_suite(
     ":test_interpolate",
     ":test_select",
     ":test_stack",
-    ":test_loop"
+    ":test_loop",
+    ":test_lstm_cell"
   ]
 )
