@@ -55,19 +55,19 @@ std::vector<float> benchmark_module(torch::jit::script::Module& mod, std::vector
         std::vector<torch::jit::IValue> inputs_ivalues;
         auto in1 = at::rand(shape1, {at::kCUDA});
 #ifdef HALF
-        in1 = in1.to(torch::kFloat32);
+        in1 = in1.to(torch::kHalf);
 #endif
         inputs_ivalues.push_back(in1.clone());
 
         auto in2 = at::rand(shape2, {at::kCUDA});
 #ifdef HALF
-        in2 = in2.to(torch::kFloat32);
+        in2 = in2.to(torch::kHalf);
 #endif
         inputs_ivalues.push_back(in2.clone());
 
         auto in3 = at::rand(shape3, {at::kCUDA});
 #ifdef HALF
-        in3 = in3.to(torch::kFloat32);
+        in3 = in3.to(torch::kHalf);
 #endif
         inputs_ivalues.push_back(in3.clone());
 
@@ -82,23 +82,21 @@ std::vector<float> benchmark_module(torch::jit::script::Module& mod, std::vector
 
         auto in1 = at::rand(shape1, {at::kCUDA});
 #ifdef HALF
-        in1 = in1.to(torch::kFloat32);
+        in1 = in1.to(torch::kHalf);
 #endif
         inputs_ivalues.push_back(in1.clone());
 
         auto in2 = at::rand(shape2, {at::kCUDA});
 #ifdef HALF
-        in2 = in2.to(torch::kFloat32);
+        in2 = in2.to(torch::kHalf);
 #endif
         inputs_ivalues.push_back(in2.clone());
 
         auto in3 = at::rand(shape3, {at::kCUDA});
 #ifdef HALF
-        in3 = in3.to(torch::kFloat32);
+        in3 = in3.to(torch::kHalf);
 #endif
         inputs_ivalues.push_back(in3.clone());
-
-        std::cout << i << std::endl;
 
         cudaDeviceSynchronize();
 
@@ -155,7 +153,7 @@ int main(int argc, const char* argv[]) {
     extra_info.workspace_size = 1 << 20;
 
 #ifdef HALF
-    extra_info.op_precision = torch::kF32;
+    extra_info.op_precision = torch::kF16;
 #endif
 
     auto trt_mod = trtorch::CompileGraph(mod, extra_info);
@@ -176,7 +174,7 @@ int main(int argc, const char* argv[]) {
 
 
 #ifdef HALF
-    mod.to(torch::kFloat32);
+    mod.to(torch::kHalf);
     for (auto layer : mod.named_modules()) {
         if (layer.name.find(".bn") != std::string::npos) {
             layer.value.to(torch::kFloat);
